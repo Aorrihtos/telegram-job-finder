@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Aorrihtos/telegram-job-finder/db"
+	"github.com/Aorrihtos/telegram-job-finder/scrapper"
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	"go.mongodb.org/mongo-driver/bson"
@@ -45,7 +46,7 @@ func HandleAnswer(ctx context.Context, b *bot.Bot, update *models.Update) {
 		AskSalaryRangeHandler(ctx, b, update)
     case "salary_range":
         searchForm.SalaryRange = answer[1]
-		fetchDbJobs(ctx, b, update)
+		saveUserPreferences(ctx, b, update)
     }
 
 }
@@ -140,7 +141,7 @@ func AskSalaryRangeHandler(ctx context.Context, b *bot.Bot, update *models.Updat
 	b.SendMessage(ctx, msg)
 }
 
-func fetchDbJobs(ctx context.Context, b *bot.Bot, update *models.Update) {
+func saveUserPreferences(ctx context.Context, b *bot.Bot, update *models.Update) {
 	msg := fmt.Sprintf("This were your preferences: \nJob Type: %s\nSpecialization: %s\nSalary Range: %s",
 		searchForm.JobType, searchForm.Category, searchForm.SalaryRange)
 
@@ -164,4 +165,49 @@ func fetchDbJobs(ctx context.Context, b *bot.Bot, update *models.Update) {
 		ChatID: update.CallbackQuery.From.ID,
 		Text:   "Your preferences have been saved successfully!",
 	})
+
+	sendUserAvailableJobs(ctx, b, update, user)
+}
+
+func sendUserAvailableJobs(ctx context.Context, b *bot.Bot, update *models.Update, user User) {
+	currentJobsPosted, err := db.GetJobsCollection().Find(ctx, bson.M{
+		// "category":  user.Preferences.Category,
+		// "job_type":  user.Preferences.JobType,
+		"salary":    bson.M{"$gte": user.Preferences.Salary.Min, "$lte": user.Preferences.Salary.Max},
+	})
+	if err != nil {
+		b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: update.CallbackQuery.From.ID,
+			Text:   "Error fetching jobs from the database. Please try again later.",
+		})
+		return
+	}
+
+	defer currentJobsPosted.Close(ctx)
+
+	var jobs []scrapper.Job
+	if err := currentJobsPosted.All(ctx, &jobs); err != nil {
+		b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: update.CallbackQuery.From.ID,
+			Text:   "Error fetching jobs from the database. Please try again later.",
+		})
+		return
+	}
+
+	if len(jobs) == 0 {
+		b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: update.CallbackQuery.From.ID,
+			Text:   "No jobs found matching your preferences at this time. When a new job is posted that matches your preferences, you'll be the first to know!",
+		})
+		return
+	}
+
+	for _, job := range jobs {
+		jobMessage := fmt.Sprintf("Position: %s\nLocation: %s\nSalary: %d - %d euros\nURL: %s",
+			job.Position, job.Location, job.Salary.Min, job.Salary.Max, job.URL)
+		b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: update.CallbackQuery.From.ID,
+			Text:   jobMessage,
+		})
+	}
 }
