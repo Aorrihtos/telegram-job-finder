@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Aorrihtos/telegram-job-finder/db"
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 var searchForm SearchForm
@@ -37,8 +40,8 @@ func HandleAnswer(ctx context.Context, b *bot.Bot, update *models.Update) {
     case "job_type":
         searchForm.JobType = answer[1]
 		AskSpecializationHandler(ctx, b, update)
-    case "specialization":
-        searchForm.Specialization = answer[1]
+    case "category":
+        searchForm.Category = answer[1]
 		AskSalaryRangeHandler(ctx, b, update)
     case "salary_range":
         searchForm.SalaryRange = answer[1]
@@ -84,19 +87,19 @@ func AskSpecializationHandler(ctx context.Context, b *bot.Bot, update *models.Up
 				{
 					{
 						Text: "Full-Stack Developer",
-						CallbackData: "specialization:fullstack",
+						CallbackData: "category:fullstack",
 					},
 					{
 						Text: "Back-end Developer",
-						CallbackData: "specialization:backend",
+						CallbackData: "category:backend",
 					},
 					{
 						Text: "Front-end Developer",
-						CallbackData: "specialization:frontend",
+						CallbackData: "category:frontend",
 					},
 					{
 						Text: "Dev-Ops",
-						CallbackData: "specialization:devops",
+						CallbackData: "category:devops",
 					},
 				},
 			},
@@ -115,19 +118,19 @@ func AskSalaryRangeHandler(ctx context.Context, b *bot.Bot, update *models.Updat
 				{
 					{
 						Text: "<= 20.000 euros",
-						CallbackData: "salary_range:<=20.000",
+						CallbackData: "salary_range:0-20000",
 					},
 					{
 						Text: "> 20.000 <= 30.000",
-						CallbackData: "salary_range:>20.000<=30.000",
+						CallbackData: "salary_range:20000-30000",
 					},
 					{
 						Text: "> 30.000 <= 50.000",
-						CallbackData: "salary_range:>30.000<=50.000",
+						CallbackData: "salary_range:30000-50000",
 					},
 					{
 						Text: "> 50.000",
-						CallbackData: "salary_range:>50.000",
+						CallbackData: "salary_range:50000-999999",
 					},
 				},
 			},
@@ -139,10 +142,26 @@ func AskSalaryRangeHandler(ctx context.Context, b *bot.Bot, update *models.Updat
 
 func fetchDbJobs(ctx context.Context, b *bot.Bot, update *models.Update) {
 	msg := fmt.Sprintf("This were your preferences: \nJob Type: %s\nSpecialization: %s\nSalary Range: %s",
-		searchForm.JobType, searchForm.Specialization, searchForm.SalaryRange)
+		searchForm.JobType, searchForm.Category, searchForm.SalaryRange)
 
 	b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: update.CallbackQuery.From.ID,
 		Text:   msg,
+	})
+
+	// Save the user preferences in the db
+	user := searchForm.toUserModel(update.CallbackQuery.From.ID)
+	opts := options.UpdateOne().SetUpsert(true)
+	_, err := db.GetUsersCollection().UpdateOne(ctx, bson.M{"_id": user.ID}, bson.M{"$set": user.Preferences}, opts)
+	if err != nil {
+		b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: update.CallbackQuery.From.ID,
+			Text:   "Error saving your preferences. Please try again later.",
+		})
+		return
+	}
+	b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID: update.CallbackQuery.From.ID,
+		Text:   "Your preferences have been saved successfully!",
 	})
 }

@@ -2,12 +2,12 @@ package main
 
 import (
 	"context"
-	"fmt"
 
 	"log"
 	"os"
 	"os/signal"
 
+	"github.com/Aorrihtos/telegram-job-finder/db"
 	"github.com/Aorrihtos/telegram-job-finder/scrapper"
 	botFinderModels "github.com/Aorrihtos/telegram-job-finder/telegram-bot"
 	"github.com/go-telegram/bot"
@@ -22,8 +22,9 @@ func main() {
 	if err != nil {
 		log.Fatal("Error loading .env file: ", err)
 	}
-	botToken := os.Getenv("BOT_TOKEN")
 
+	// Create Telegram BOT
+	botToken := os.Getenv("BOT_TOKEN")
 	opts := []bot.Option{
 		bot.WithDefaultHandler(botFinderModels.DefaultHandler),
 	}
@@ -33,12 +34,25 @@ func main() {
 		log.Fatal("Error creating bot: ", err)
 	}
 
+	// Connect to MongoDB
+	mongoClient, err := db.ConnectToDb()
+	if err != nil {
+		log.Fatal("Error connecting to MongoDB: ", err)
+	}
+
+	defer func() {
+		if err = mongoClient.Disconnect(context.TODO()); err != nil {
+			log.Fatalln("Error disconnecting from MongoDB: ", err)
+		}
+	}()
+
+	// Start Scrapper and Bot
 	go scrapper.RunScrapper()
 	go b.Start(ctx)
-	
-	fmt.Println("Bot started successfully. Listening for updates...")
+
+	log.Println("Bot started successfully. Listening for updates...")
 	// Wait for an interrupt signal to gracefully shut down the bot
 	<-ctx.Done()
 
-	fmt.Println("Shutting down bot...")
+	log.Println("Shutting down bot...")
 }
