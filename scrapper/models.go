@@ -12,9 +12,31 @@ type RemoteOKJob struct {
 	URL         string `json:"url"`
 }
 
+type WeWorkRemotelyJob struct {
+	Title      string `xml:"title"`
+	Region     string `xml:"region"`
+	Country    string `xml:"country"`
+	Skills     string `xml:"skills"`
+	Category   string `xml:"category"`
+	Type       string `xml:"type"`
+	PubDate    string `xml:"pubDate"`
+	Link       string `xml:"link"`
+}
+
+type WeWorkRemotelyChannel struct {
+	Channel struct {
+		Title string `xml:"title"`
+		Link string `xml:"link"`
+		Description string `xml:"description"`
+		Language string `xml:"language"`
+		TTL int `xml:"ttl"`
+		Items []WeWorkRemotelyJob `xml:"item"`
+	} `xml:"channel"`
+}
 type Job struct {
 	Position string `json:"position"`
-	JobType      string `json:"job_type"`
+	Company string `json:"company"`
+	Type      string `json:"type"`
 	Category     string `json:"category"`
 	Salary       struct{
 		Min int `json:"min"`

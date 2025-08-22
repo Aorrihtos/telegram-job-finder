@@ -71,6 +71,10 @@ func NewSessionHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 						Text: "Part-time",
 						CallbackData: "job_type:part_time",
 					},
+					{
+						Text: "Contract",
+						CallbackData: "job_type:contract",
+					},
 				},
 			},
 		},
@@ -97,6 +101,18 @@ func AskSpecializationHandler(ctx context.Context, b *bot.Bot, update *models.Up
 					{
 						Text: "Front-end Developer",
 						CallbackData: "category:frontend",
+					},
+					{
+						Text: "Mobile Developer",
+						CallbackData: "category:mobile",
+					},
+					{
+						Text: "Data Scientist",
+						CallbackData: "category:data",
+					},
+					{
+						Text: "AI Developer",
+						CallbackData: "category:ml_ai",
 					},
 					{
 						Text: "Dev-Ops",
@@ -171,9 +187,10 @@ func saveUserPreferences(ctx context.Context, b *bot.Bot, update *models.Update)
 
 func sendUserAvailableJobs(ctx context.Context, b *bot.Bot, update *models.Update, user User) {
 	currentJobsPosted, err := db.GetJobsCollection().Find(ctx, bson.M{
-		// "category":  user.Preferences.Category,
-		// "job_type":  user.Preferences.JobType,
-		"salary":    bson.M{"$gte": user.Preferences.Salary.Min, "$lte": user.Preferences.Salary.Max},
+		"category":  user.Preferences.Category,
+		"type":  user.Preferences.JobType,
+		"salary.min":    bson.M{"$gte": user.Preferences.Salary.Min},
+		"salary.max":    bson.M{"$lte": user.Preferences.Salary.Max},
 	})
 	if err != nil {
 		b.SendMessage(ctx, &bot.SendMessageParams{
