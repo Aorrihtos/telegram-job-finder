@@ -13,7 +13,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-var searchForm SearchForm
+var preferencesMap = make(map[int64]*SearchForm)
 
 func DefaultHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	if (update.Message != nil){
@@ -37,15 +37,17 @@ func HandleAnswer(ctx context.Context, b *bot.Bot, update *models.Update) {
 		return 
 	}
 
+	preferences := preferencesMap[cq.From.ID]
+
     switch answer[0] {
     case "job_type":
-        searchForm.JobType = answer[1]
+        preferences.JobType = answer[1]
 		AskSpecializationHandler(ctx, b, update)
     case "category":
-        searchForm.Category = answer[1]
+        preferences.Category = answer[1]
 		AskSalaryRangeHandler(ctx, b, update)
     case "salary_range":
-        searchForm.SalaryRange = answer[1]
+        preferences.SalaryRange = answer[1]
 		saveUserPreferences(ctx, b, update)
     }
 
@@ -56,6 +58,8 @@ func NewSessionHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 		ChatID: update.Message.Chat.ID,
 		Text:   "Welcome to the job finder bot! Tell me your preferences and I will dig the internet for you",
 	})
+
+	preferencesMap[update.Message.Chat.ID] = &SearchForm{}
 
 	msg := &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
@@ -98,6 +102,8 @@ func AskSpecializationHandler(ctx context.Context, b *bot.Bot, update *models.Up
 						Text: "Back-end Developer",
 						CallbackData: "category:backend",
 					},
+				},
+				{
 					{
 						Text: "Front-end Developer",
 						CallbackData: "category:frontend",
@@ -106,6 +112,8 @@ func AskSpecializationHandler(ctx context.Context, b *bot.Bot, update *models.Up
 						Text: "Mobile Developer",
 						CallbackData: "category:mobile",
 					},
+				},
+				{
 					{
 						Text: "Data Scientist",
 						CallbackData: "category:data",
@@ -137,14 +145,20 @@ func AskSalaryRangeHandler(ctx context.Context, b *bot.Bot, update *models.Updat
 						Text: "<= 20.000 euros",
 						CallbackData: "salary_range:0-20000",
 					},
+				},
+				{
 					{
 						Text: "> 20.000 <= 30.000",
 						CallbackData: "salary_range:20000-30000",
 					},
+				},
+				{
 					{
 						Text: "> 30.000 <= 50.000",
 						CallbackData: "salary_range:30000-50000",
 					},
+				},
+				{
 					{
 						Text: "> 50.000",
 						CallbackData: "salary_range:50000-999999",
@@ -158,30 +172,26 @@ func AskSalaryRangeHandler(ctx context.Context, b *bot.Bot, update *models.Updat
 }
 
 func saveUserPreferences(ctx context.Context, b *bot.Bot, update *models.Update) {
-	msg := fmt.Sprintf("This were your preferences: \nJob Type: %s\nSpecialization: %s\nSalary Range: %s",
-		searchForm.JobType, searchForm.Category, searchForm.SalaryRange)
-
-	b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: update.CallbackQuery.From.ID,
-		Text:   msg,
-	})
+	chatId := update.CallbackQuery.From.ID
+	preferences := preferencesMap[chatId]
 
 	// Save the user preferences in the db
-	user := searchForm.toUserModel(update.CallbackQuery.From.ID)
+	user := preferences.toUserModel(chatId)
 	opts := options.UpdateOne().SetUpsert(true)
 	_, err := db.GetUsersCollection().UpdateOne(ctx, bson.M{"_id": user.ID}, bson.M{"$set": user.Preferences}, opts)
 	if err != nil {
 		b.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: update.CallbackQuery.From.ID,
+			ChatID: chatId,
 			Text:   "Error saving your preferences. Please try again later.",
 		})
 		return
 	}
 	b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: update.CallbackQuery.From.ID,
+		ChatID: chatId,
 		Text:   "Your preferences have been saved successfully!",
 	})
 
+	delete(preferencesMap, chatId) // Clean up the map to free up memory
 	sendUserAvailableJobs(ctx, b, update, user)
 }
 

@@ -14,10 +14,10 @@ var scrappers = []Scrapper{
 
 func RunScrapper() {
 	httpClient := &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: 10 * time.Minute,
 	}
 
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(10 * time.Minute)
 
 	// Launch at startup and then, every minute
 	wg := &sync.WaitGroup{}
@@ -27,7 +27,7 @@ func RunScrapper() {
 }
 
 func launchScrappers(wg *sync.WaitGroup, httpClient *http.Client) {
-	insertedJobs := make([]any, 2000, 4000) // Default capacity for storage
+	insertedJobs := make([]any, 0, 4000) // Default capacity for storage
 	for _, s := range scrappers {
 		wg.Add(1)
 		go s.scrape(httpClient, wg, &insertedJobs)
